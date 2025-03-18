@@ -32,15 +32,42 @@ public class MultiTenancyConfig implements WebMvcConfigurer {
         return new HandlerInterceptor() {
             @Override
             public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
-                String tenantId = request.getHeader("X-Tenant-ID");
-                if (tenantId != null) {
-                    tenantContext().setTenantId(tenantId);
-                    logger.info("Tenant ID set to: " + tenantId);
-                } else {
-                    logger.warning("No Tenant ID found in request");
+                // Extract tenant identifier - could be from header, subdomain, path, or query parameter
+                // For Daraja callbacks, we might need to determine tenant from the request data
+
+                // Example: Extract from header
+                String tenantId = request.getHeader("X-TenantId");
+
+                // If not in header, check query parameter
+                if (tenantId == null) {
+                    tenantId = request.getParameter("tenantId");
                 }
+
+                // If still not found, use default tenant
+                if (tenantId == null) {
+                    tenantId = "default";
+                }
+
+                logger.info("Setting tenant context: " + tenantId);
+                tenantContext().setTenantId(tenantId);
+
                 return true;
             }
         };
+    }
+
+    /**
+     * Request-scoped bean to store the current tenant identifier
+     */
+    public static class TenantContext {
+        private String tenantId;
+
+        public String getTenantId() {
+            return tenantId;
+        }
+
+        public void setTenantId(String tenantId) {
+            this.tenantId = tenantId;
+        }
     }
 }

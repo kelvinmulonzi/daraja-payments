@@ -26,6 +26,7 @@ public class DarajaTransactionService {
     private final ShareTransactionRepository shareTransactionRepository;
     private final PaymentDetailRepository paymentDetailRepository;
     private final AccountService accountService;
+    private final TenantResolverService tenantResolverService;
 
     @Autowired
     public DarajaTransactionService(
@@ -33,18 +34,24 @@ public class DarajaTransactionService {
             SavingsTransactionRepository savingsTransactionRepository,
             ShareTransactionRepository shareTransactionRepository,
             PaymentDetailRepository paymentDetailRepository,
-            AccountService accountService) {
+            AccountService accountService,
+            TenantResolverService tenantResolverService) {
         this.loanTransactionRepository = loanTransactionRepository;
         this.savingsTransactionRepository = savingsTransactionRepository;
         this.shareTransactionRepository = shareTransactionRepository;
         this.paymentDetailRepository = paymentDetailRepository;
         this.accountService = accountService;
+        this.tenantResolverService = tenantResolverService;
     }
 
     @Transactional
     public boolean processC2BTransaction(C2BCallbackRequest request) {
         try {
             logger.info("Processing C2B transaction: " + request.getTransID());
+
+            // Set tenant context based on business shortcode
+            Long tenantId = tenantResolverService.resolveTenantFromShortCode(request.getBusinessShortCode());
+            logger.info("Resolved tenant ID: " + tenantId + " for shortcode: " + request.getBusinessShortCode());
 
             // Extract and clean account number from BillRefNumber
             String accountNumber = DarajaUtil.extractAccountNumber(request.getBillRefNumber());
@@ -55,7 +62,7 @@ public class DarajaTransactionService {
             }
 
             // Save payment detail first
-            PaymentDetail paymentDetail = savePaymentDetail(request);
+            PaymentDetail paymentDetail = savePaymentDetail(request, tenantId);
 
             // Determine account type and save transaction
             String accountType = accountService.determineAccountType(accountNumber);
@@ -89,16 +96,14 @@ public class DarajaTransactionService {
         }
     }
 
-    private PaymentDetail savePaymentDetail(C2BCallbackRequest request) {
+    private PaymentDetail savePaymentDetail(C2BCallbackRequest request, Long tenantId) {
         PaymentDetail paymentDetail = new PaymentDetail();
         paymentDetail.setReceiptNumber(request.getTransID());
         paymentDetail.setPaymentType("M-PESA");
         paymentDetail.setAmount(new BigDecimal(request.getTransAmount()));
         paymentDetail.setPaymentDate(request.getTransTime());
         paymentDetail.setPhoneNumber(DarajaUtil.formatPhoneNumber(request.getPhoneNumber()));
-
-        // For multi-tenancy, you could set tenant ID based on a tenant resolver service
-        // paymentDetail.setTenantId(tenantResolverService.getCurrentTenantId());
+        paymentDetail.setTenantId(tenantId);
 
         return paymentDetailRepository.save(paymentDetail);
     }

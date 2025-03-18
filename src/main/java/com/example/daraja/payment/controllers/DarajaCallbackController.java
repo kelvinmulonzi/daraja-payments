@@ -3,6 +3,7 @@ package com.example.daraja.payment.controllers;
 import com.example.daraja.payment.DTO.C2BCallbackRequest;
 import com.example.daraja.payment.DTO.C2BCallbackResponse;
 import com.example.daraja.payment.Services.DarajaTransactionService;
+import com.example.daraja.payment.Services.TransactionLogger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -20,10 +21,12 @@ public class DarajaCallbackController {
     private static final Logger logger = Logger.getLogger(DarajaCallbackController.class.getName());
 
     private final DarajaTransactionService transactionService;
+    private final TransactionLogger transactionLogger;
 
     @Autowired
-    public DarajaCallbackController(DarajaTransactionService transactionService) {
+    public DarajaCallbackController(DarajaTransactionService transactionService, TransactionLogger transactionLogger) {
         this.transactionService = transactionService;
+        this.transactionLogger = transactionLogger;
     }
 
     @PostMapping("/c2b/callback")
@@ -38,9 +41,11 @@ public class DarajaCallbackController {
         if (success) {
             response.setResultCode("0");
             response.setResultDesc("Success");
+            transactionLogger.logTransaction(request, "SUCCESS");
         } else {
             response.setResultCode("1");
             response.setResultDesc("Failed");
+            transactionLogger.logTransaction(request, "FAILED");
         }
 
         return ResponseEntity.ok(response);
