@@ -2,62 +2,51 @@ package com.example.daraja.payment.configuration;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.context.annotation.RequestScope;
-import org.springframework.web.servlet.HandlerInterceptor;
-import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
-import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.server.WebFilter;
+import org.springframework.web.server.WebFilterChain;
+import reactor.core.publisher.Mono;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
 import java.util.logging.Logger;
 
 @Configuration
-public class MultiTenancyConfig implements WebMvcConfigurer {
+public class MultiTenancyConfig {
 
     private static final Logger logger = Logger.getLogger(MultiTenancyConfig.class.getName());
 
     @Bean
-    @RequestScope
     public TenantContext tenantContext() {
         return new TenantContext();
     }
 
-    @Override
-    public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(tenantInterceptor());
-    }
-
     @Bean
-    public HandlerInterceptor tenantInterceptor() {
-        return new HandlerInterceptor() {
-            @Override
-            public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
-                // Extract tenant identifier - could be from header, subdomain, path, or query parameter
-                // For Daraja callbacks, we might need to determine tenant from the request data
+    public WebFilter tenantFilter() {
+        return (ServerWebExchange exchange, WebFilterChain chain) -> {
+            // Extract tenant identifier - could be from header, subdomain, path, or query parameter
+            // For Daraja callbacks, we might need to determine tenant from the request data
 
-                // Example: Extract from header
-                String tenantId = request.getHeader("X-TenantId");
+            // Example: Extract from header
+            String tenantId = exchange.getRequest().getHeaders().getFirst("X-TenantId");
 
-                // If not in header, check query parameter
-                if (tenantId == null) {
-                    tenantId = request.getParameter("tenantId");
-                }
-
-                // If still not found, use default tenant
-                if (tenantId == null) {
-                    tenantId = "default";
-                }
-
-                logger.info("Setting tenant context: " + tenantId);
-                tenantContext().setTenantId(tenantId);
-
-                return true;
+            // If not in header, check query parameter
+            if (tenantId == null) {
+                tenantId = exchange.getRequest().getQueryParams().getFirst("tenantId");
             }
+
+            // If still not found, use default tenant
+            if (tenantId == null) {
+                tenantId = "default";
+            }
+
+            logger.info("Setting tenant context: " + tenantId);
+            tenantContext().setTenantId(tenantId);
+
+            return chain.filter(exchange);
         };
     }
 
     /**
-     * Request-scoped bean to store the current tenant identifier
+     * Bean to store the current tenant identifier
      */
     public static class TenantContext {
         private String tenantId;
